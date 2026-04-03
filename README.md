@@ -1,11 +1,11 @@
-# 🤖 Autonomous Sales Manager Bot
+# Autonomous Sales Manager Bot
 
 > **Expansion Joint Covers Company** — Discord Sales Agent
 > Production-grade prototype for automated product inquiries, quotations, and customer management across GCC, India, and SEA regions.
 
 ---
 
-## 📦 Architecture Overview
+## Architecture Overview
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -29,9 +29,9 @@
         │
         ▼
 ┌────────────────────┐     ┌──────────────────┐
-│ product_validator  │────▶│ pricing_engine   │
+│ product_validator  │───▶ │  pricing_engine  │
 │ (RULE-BASED)       │     │ (DETERMINISTIC)  │
-│ ⚠️ CRITICAL SAFETY │     │ No LLM involved  │
+│  CRITICAL SAFETY   │     │ No LLM involved  │
 └────────┬───────────┘     └────────┬─────────┘
          │                         │
          └────────────┬────────────┘
@@ -54,7 +54,7 @@
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### 1. Install Dependencies
 ```bash
@@ -81,7 +81,7 @@ python main.py
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 Discord/
@@ -104,7 +104,7 @@ Discord/
 
 ---
 
-## 💬 Discord Commands
+## Discord Commands
 
 | Command | Description | Example |
 |---------|-------------|---------|
@@ -116,7 +116,7 @@ Discord/
 
 ---
 
-## (a) Context Degradation in Long-Running Agents
+## Context Degradation in Long-Running Agents
 
 ### The Problem
 LLMs have fixed context windows (typically 4K–128K tokens). As conversations grow longer, the agent faces:
@@ -157,7 +157,7 @@ Hybrid (future improvement):
 
 ---
 
-## (b) Task-Job Boundary — 5 Escalation Rules
+## Task-Job Boundary — 5 Escalation Rules
 
 The bot must know when to STOP being autonomous and escalate to a human.
 
@@ -177,113 +177,7 @@ The bot must know when to STOP being autonomous and escalate to a human.
 
 ---
 
-## (c) JIORP Spec — "Generate GCC Quotation"
-
-### Job: Generate a Valid GCC Region Quotation
-
-```yaml
-Job ID: GCC-QUOTE-001
-Job Name: Generate GCC Quotation
-Owner: Sales Bot (autonomous)
-Escalation: Senior Sales Manager
-
-Inputs:
-  - product_code: string (required) — e.g., "WTZ-1700"
-  - use_case: string (optional) — e.g., "floor joints for Dubai mall"
-  - quantity: integer (default: 1) — number of units
-  - user_id: string (required) — Discord user ID
-
-Outputs:
-  - formatted_quote: string — Professional markdown quotation
-  - quote_id: UUID — Database reference
-  - breakdown_json:
-      formula: "GCC: (base_price × 2.0) + (shipping × 1.5)"
-      base_price_usd: float
-      material_cost: float (base × 2.0)
-      shipping_total: float (shipping × 1.5)
-      unit_price: float
-      quantity: int
-      total_price: float
-      currency: "AED"
-
-Rules:
-  R1: Product MUST exist in products table
-  R2: Use-case MUST NOT violate product constraints
-  R3: Pricing is DETERMINISTIC: unit = (base × 2.0) + (shipping × 1.5)
-  R4: Currency is ALWAYS AED for GCC
-  R5: Quote must include full breakdown_json
-  R6: Total = unit_price × quantity
-  R7: If quantity > 500 → ESCALATE (do not generate quote)
-
-Failure Handling:
-  F1: Product not found → Return "unknown product" message, log escalation
-  F2: Constraint violation → Return rejection with explanation, log guardrail
-  F3: LLM formatting fails → Return raw pricing data (no formatting), log error
-  F4: DB save fails → Still return quote to user, log critical warning
-  F5: Pricing calculation error → Return error message, do NOT provide estimate
-
-Success Criteria:
-  - Quote contains correct product_code
-  - Price matches formula exactly
-  - Currency = AED
-  - breakdown_json is valid JSON
-  - Entry exists in quotes table
-  - Audit log has "quote_generated" entry
-```
-
----
-
-## (d) Token Economics — Cost Comparison
-
-### Assumptions
-- 200 conversations/day
-- Average 4 LLM calls per conversation (intent parse + response + quote format + misc)
-- Average 500 input tokens + 300 output tokens per call
-- 800 calls/day total
-
-### Cost Estimates
-
-| Model | Input Cost | Output Cost | Daily Input (400K tokens) | Daily Output (240K tokens) | **Daily Total** | Monthly (30d) |
-|-------|-----------|-------------|--------------------------|---------------------------|----------------|---------------|
-| **Claude 3.5 Sonnet** | $3.00/M | $15.00/M | $1.20 | $3.60 | **$4.80** | $144 |
-| **DeepSeek V3** | $0.27/M | $1.10/M | $0.108 | $0.264 | **$0.37** | $11.16 |
-| **NVIDIA (Llama 3.1 70B)** | $0.59/M | $0.79/M | $0.236 | $0.190 | **$0.43** | $12.82 |
-| **Qwen (self-hosted)** | GPU cost | GPU cost | — | — | **~$5-15*** | ~$150-450* |
-
-*\*Qwen self-hosted: Depends on GPU rental (A100: ~$2/hr, H100: ~$3/hr). At low utilization, self-hosting is MORE expensive than API.*
-
-### Recommendation
-
-```
-For this use case (200 convos/day):
-
-🥇 DeepSeek V3:     $0.37/day  ($11/month)  — Best cost/quality ratio
-🥈 NVIDIA Llama 3.1: $0.43/day  ($13/month)  — Good balance, current setup
-🥉 Claude Sonnet:   $4.80/day  ($144/month) — Best quality, 10× cost
-
-Self-hosting: Only worthwhile at >2,000 conversations/day
-              with consistent utilization to amortize GPU costs.
-```
-
-### Token Optimization Strategies
-1. **Cache intent parsing prompts** — Product list rarely changes
-2. **Use structured output mode** — Reduces output tokens by ~30%
-3. **Batch follow-up processing** — One LLM call for multiple follow-ups
-4. **Compress conversation history** — Summarize after 10 messages
-
----
-
-## 🔐 Security Notes
-
-- Never commit `.env` file (add to `.gitignore`)
-- Supabase RLS (Row Level Security) should be enabled in production
-- Discord tokens should be rotated periodically
-- Audit logs should be backed up separately
-- Rate limiting should be added for production
-
----
-
-## 🧪 Testing
+## Testing
 
 ### Run Guardrail Test
 ```
@@ -302,6 +196,3 @@ SEA:   450 × 2.5 = $1,125.00 SGD per unit
 
 ---
 
-## 📜 License
-
-Internal use only. Proprietary to Expansion Joint Covers Company.
